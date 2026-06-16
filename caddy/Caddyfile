@@ -1,0 +1,6 @@
+tf.jay-gpu.ddns.net {
+    basic_auth {
+        colleague <COLLEAGUE_BCRYPT_HASH>
+    }
+    reverse_proxy tfshared:8888
+}

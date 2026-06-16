@@ -1,0 +1,112 @@
+name: ai-stack-shared
+
+services:
+  tfshared:
+    build:
+      context: ./tensorflow-shared
+      dockerfile: Dockerfile
+    container_name: ai-tfshared
+    user: "${SHARED_UID}:${SHARED_GID}"
+    working_dir: /workspace
+    restart: unless-stopped
+    shm_size: "16g"
+    ipc: host
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      stack:   { soft: 67108864, hard: 67108864 }
+    environment:
+      NVIDIA_VISIBLE_DEVICES: "all"
+      NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
+      TZ: Asia/Seoul
+      HOME: /workspace/.home
+      JUPYTER_CONFIG_DIR: /workspace/.home/.jupyter
+      GIT_CONFIG_GLOBAL: /workspace/.home/.gitconfig
+      GIT_USER_NAME: "${GIT_USER_NAME}"
+      GIT_USER_EMAIL: "${GIT_USER_EMAIL}"
+    gpus: all
+    ports:
+      - "127.0.0.1:8893:8888"
+    volumes:
+      - ./shared/tensorflow:/workspace
+      - ./scripts/check_tf.py:/opt/check_tf.py:ro
+      - ./jupyter_config/shared_jupyter_server_config.py:/workspace/.home/.jupyter/jupyter_server_config.py:ro
+      - ./secrets/github_known_hosts:/workspace/.home/.ssh/known_hosts:ro
+      - ./cache/tf:/workspace/.home/.cache
+      # 공용 볼륨 추가
+      - shared_artifacts:/workspace/shared
+    secrets:
+      - jupyter_shared_hash
+      - tf_deploy_key
+    # 공용 외부네트워크 및 내부네트워크 경로 추가
+    networks:
+      - ai_internal
+      - ai_shared_net
+    command:
+      - bash
+      - -lc
+      - |
+          set -euo pipefail
+          ACTUAL_HOME="$$(getent passwd "$$(id -u)" | cut -d: -f6)"
+          mkdir -p "$$HOME/.jupyter" "$$HOME/.ssh" "$$HOME/.cache" "$$ACTUAL_HOME/.ssh"
+          install -m 600 /run/secrets/tf_deploy_key "$$HOME/.ssh/id_ed25519"
+          install -m 600 /run/secrets/tf_deploy_key "$$ACTUAL_HOME/.ssh/id_ed25519"
+          install -m 644 "$$HOME/.ssh/known_hosts" "$$ACTUAL_HOME/.ssh/known_hosts"
+          cat > "$$ACTUAL_HOME/.ssh/config" <<EOF
+          Host github.com
+            HostName github.com
+            User git
+            IdentityFile $$ACTUAL_HOME/.ssh/id_ed25519
+            IdentitiesOnly yes
+            UserKnownHostsFile $$ACTUAL_HOME/.ssh/known_hosts
+          EOF
+          chmod 600 "$$ACTUAL_HOME/.ssh/config"
+          git config --global user.name "$$GIT_USER_NAME"
+          git config --global user.email "$$GIT_USER_EMAIL"
+          python3 /opt/check_tf.py || echo "[WARN] tensorflow self-test failed, continuing to Jupyter..."
+          exec jupyter lab
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import tensorflow as tf; print(len(tf.config.list_physical_devices(\"GPU\")))'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  caddy:
+    image: caddy:2
+    container_name: ai-caddy
+    restart: unless-stopped
+    depends_on:
+      - tfshared
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CADDY_EMAIL: "${CADDY_EMAIL}"
+      DOMAIN_TF: "${DOMAIN_TF}"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/data:/data
+      - ./caddy/config:/config
+    networks:
+      - ai_internal
+
+networks:
+  ai_internal:
+    external: true
+    name: ai_internal
+
+  # 외부 네트워크/볼륨 선언 추가(GPT: GPU Tensorflow 설정 5-2) # ~~
+  ai_shared_net:
+    external: true
+    name: ai_shared_net
+
+volumes:
+  shared_artifacts:
+    external: true
+    name: shared_artifacts
+# ~~~ #
+
+secrets:
+  jupyter_shared_hash:
+    file: ./secrets/jupyter_shared_hash.txt
+  tf_deploy_key:
+    file: ./secrets/tf_deploy_key

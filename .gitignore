@@ -1,0 +1,39 @@
+# 런타임 / 캐시
+cache/
+data/
+models/
+notebooks/
+
+# 컨테이너 작업 공간 (프로젝트별 Git으로 관리)
+shared/tensorflow/
+shared/DOCKER-SHARE/
+
+# Caddy 런타임 (인증서, 설정 캐시)
+caddy/config/
+caddy/data/
+
+# 보안 / 환경 변수
+secrets/
+.env
+.env.*
+!.env.shared.example
+
+# 백업
+*.bak
+*-backup
+*-backup.*
+docker-compose-backup*.yml
+compose-shared.yml.bak
+Caddyfile-backup
+Dockerfile_backup
+
+# Jupyter / Python
+.ipynb_checkpoints/
+__pycache__/
+*.py[cod]
+.Trash-*/
+
+# OS / 에디터
+.DS_Store
+*.swp
+*~
