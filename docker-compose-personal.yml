@@ -1,0 +1,165 @@
+name: ai-stack-personal
+
+x-common: &common
+  gpus: all
+  working_dir: /workspace
+  restart: unless-stopped
+  shm_size: "16g"
+  ipc: host
+  ulimits:
+    memlock: { soft: -1, hard: -1 }
+    stack:   { soft: 67108864, hard: 67108864 }
+  environment:
+    NVIDIA_VISIBLE_DEVICES: "all"
+    NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
+    TZ: Asia/Seoul
+
+# ai_internal 도커 컨테이너 통신용 내부 네트워크 생성을 통한 공용 네트워크 경로 삭제
+#  networks:
+#    - ai_internal
+
+services:
+  pytorch:
+    <<: *common
+    container_name: ai-pytorch
+    build:
+      context: ./pytorch
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8888:8888"
+    volumes:
+      - ./data:/workspace/data
+      - ./notebooks:/workspace/notebooks
+      - ./scripts/check_torch.py:/opt/check_torch.py:ro
+      - ./scripts:/workspace/scripts:ro
+      - ./cache/pip:/root/.cache/pip
+      - ./jupyter_config/personal_jupyter_server_config.py:/root/.jupyter/jupyter_server_config.py:ro
+      - ${HOME}/.gitconfig:/root/.gitconfig:ro
+      - ${HOME}/.ssh:/root/.ssh:ro
+      - ./qec/src/qec_sim:/workspace/qec/src/qec_sim
+      # 공용볼륨 추가
+      - shared_artifacts:/workspace/shared
+    secrets:
+      - jupyter_personal_hash
+    # 공용 외부네트워크 및 내부네트워크 경로 추가
+    networks:
+      - ai_internal
+      - ai_shared_net
+    command:
+      - bash
+      - -lc
+      - |
+          set -euo pipefail
+          # 공용 볼륨 추가 실행
+          mkdir -p /workspace/shared
+          python3 /opt/check_torch.py
+          # 공용 네트워크 및 uvicorn 서버 기반 API 실행
+          uvicorn api_torch:app --app-dir /workspace/scripts --host 0.0.0.0 --port 9001 &
+          exec jupyter lab --allow-root
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import torch; assert torch.cuda.is_available(); print(1)'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  cuquantum:
+    <<: *common
+    container_name: ai-cuquantum
+    build:
+      context: ./cuquantum
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8891:8888"
+    environment:
+      NVIDIA_VISIBLE_DEVICES: "all"
+      NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
+      TZ: Asia/Seoul
+      CUPY_COMPILE_WITH_PTX: "1"
+      CUPY_NVRTC_OPTIONS: "--gpu-architecture=compute_120"
+      CUPY_CACHE_DIR: /root/.cupy/kernel_cache
+    volumes:
+      - ./data:/workspace/data
+      - ./notebooks:/workspace/notebooks
+      - ./scripts/check_cuq.py:/opt/check_cuq.py:ro
+      - ./scripts:/workspace/scripts:ro
+      - ./cache/pip:/root/.cache/pip
+      - ./cache/cupy:/root/.cupy
+      - ./jupyter_config/personal_jupyter_server_config.py:/root/.jupyter/jupyter_server_config.py:ro
+      - ${HOME}/.gitconfig:/root/.gitconfig:ro
+      - ${HOME}/.ssh:/root/.ssh:ro
+      # 공용볼륨 추가
+      - shared_artifacts:/workspace/shared
+    secrets:
+      - jupyter_personal_hash
+    # 공용 외부네트워크 및 내부네트워크 경로 추가
+    networks:
+      - ai_internal
+      - ai_shared_net
+    command:
+      - bash
+      - -lc
+      - |
+          set -euo pipefail
+          # 공용 볼륨 추가 실행
+          mkdir -p /workspace/shared
+          python3 /opt/check_cuq.py || echo "[WARN] cuquantum self-test failed, continuing to Jupyter..."
+          # 공용 네트워크 및 uvicorn 서버 기반 API 실행
+          uvicorn api_cuq:app --app-dir /workspace/scripts --host 0.0.0.0 --port 9002 &
+          exec jupyter lab --allow-root
+
+  pennylane:
+    <<: *common
+    container_name: ai-pennylane
+    build:
+      context: ./pennylane
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8892:8888"
+    volumes:
+      - ./data:/workspace/data
+      - ./notebooks:/workspace/notebooks
+      - ./scripts/check_pennylane.py:/opt/check_pennylane.py:ro
+      - ./scripts:/workspace/scripts:ro
+      - ./cache/pip:/root/.cache/pip
+      - ./jupyter_config/personal_jupyter_server_config.py:/root/.jupyter/jupyter_server_config.py:ro
+      - ${HOME}/.gitconfig:/root/.gitconfig:ro
+      - ${HOME}/.ssh:/root/.ssh:ro
+      # 공용볼륨 추가
+      - shared_artifacts:/workspace/shared
+    secrets:
+      - jupyter_personal_hash
+    # 공용 외부네트워크 및 내부네트워크 경로 추가
+    networks:
+      - ai_internal
+      - ai_shared_net
+    command:
+      - bash
+      - -lc
+      - |
+          set -euo pipefail
+          # 공용 볼륨 추가 실행
+          mkdir -p /workspace/shared
+          # 공용 네트워크 및 uvicorn 서버 기반 API 실행
+          uvicorn api_pennylane:app --app-dir /workspace/scripts --host 0.0.0.0 --port 9003 &
+          python3 /opt/check_pennylane.py
+          exec jupyter lab --allow-root
+
+# 외부 네트워크/볼륨 선언 추가(GPT: GPU Tensorflow 설정 4-1) # ~~
+networks:
+  ai_internal:
+    external: true
+    name: ai_internal
+  ai_shared_net:
+    external: true
+    name: ai_shared_net
+
+volumes:
+  shared_artifacts:
+    external: true
+    name: shared_artifacts
+
+# ~~~ #
+
+secrets:
+  jupyter_personal_hash:
+    file: ./secrets/jupyter_personal_hash.txt
