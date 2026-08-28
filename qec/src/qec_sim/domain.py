@@ -8,17 +8,16 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 import numpy as np
 
-@dataclass(frozen=True)
 
-# QEC 실험 조건 정의 클래스
-"""
-하나의 surface-code QEC simulation experiment를 정의하는 설정 객체.
-회로 종류, code distance, stabilizer measurement round,
-physical/measurement noise rate, Monte Carlo shots 및 seed 등을 관리한다.
-frozen=True를 사용하여 실험 시작 후 설정이 변경되는 것을 방지하고
-experiment reproducibility를 유지한다.
-"""
+@dataclass(frozen=True)
 class ExperimentConfig:
+    """
+    하나의 surface-code QEC simulation experiment를 정의하는 설정 객체.
+    회로 종류, code distance, stabilizer measurement round,
+    physical/measurement noise rate, Monte Carlo shots 및 seed 등을 관리한다.
+    frozen=True를 사용하여 실험 시작 후 설정이 변경되는 것을 방지하고
+    experiment reproducibility를 유지한다.
+    """
     # Stim에서 생성할 QEC 회로 종류
     task: str = "surface_code:rotated_memory_x"
 
@@ -47,18 +46,18 @@ class ExperimentConfig:
 
     @property
     def effective_rounds(self) -> int:
-    """
-    실제 simulation에서 사용할 stabilizer measurement round를 반환한다.
-    rounds가 명시되어 있으면 해당 값을 사용하고,
-    지정되지 않은 경우 code distance를 기본 round 수로 사용한다.
-    """
+        """
+        실제 simulation에서 사용할 stabilizer measurement round를 반환한다.
+        rounds가 명시되어 있으면 해당 값을 사용하고,
+        지정되지 않은 경우 code distance를 기본 round 수로 사용한다.
+        """
         return self.rounds if self.rounds is not None else self.distance
 
     def validate(self) -> None:
-    """
-    QEC simulation 실행 전에 experiment parameter의 유효성을 검사한다.
-    잘못된 설정이 존재하면 simulation 실행 전에 문제를 차단한다.
-    """
+        """
+        QEC simulation 실행 전에 experiment parameter의 유효성을 검사한다.
+        잘못된 설정이 존재하면 simulation 실행 전에 문제를 차단한다.
+        """
         if self.distance < 2:
             raise ValueError("distance must be >= 2")
 
@@ -80,42 +79,47 @@ class ExperimentConfig:
 
 
 @dataclass(frozen=True)
-"""
-Stim simulation에서 생성된 syndrome batch를 표현한다.
-detections: 각 shot에서 발생한 detection event 배열.
-observables:  각 shot의 실제 logical observable flip 정보.
-"""
 class SampleBatch:
+    """
+    Stim simulation에서 생성된 syndrome batch를 표현한다.
+    detections: 각 shot에서 발생한 detection event 배열.
+    observables: 각 shot의 실제 logical observable flip 정보.
+    """
     detections: np.ndarray
     observables: np.ndarray
 
 
 @dataclass(frozen=True)
-"""
-생성된 QEC circuit의 구조적 규모를 나타내는 통계정보.
-code distance 증가에 따른 circuit 규모와 decoder scalability를 분석하기 위한 metadata로 사용한다.
-"""
 class CircuitStats:
+    """
+    생성된 QEC circuit의 구조적 규모를 나타내는 통계정보.
+    code distance 증가에 따른 circuit 규모와 decoder scalability를
+    분석하기 위한 metadata로 사용한다.
+    """
     num_qubits: int
     num_detectors: int
     num_observables: int
 
+
 @dataclass(frozen=True)
-# QEC decoder의 성능 평가 결과.
 class EvaluationResult:
+    """QEC decoder의 성능 평가 결과."""
     logical_errors: int
     logical_error_rate: float
     detection_event_density: float
 
+
 @dataclass(frozen=True)
-"""
-하나의 QEC simulation/decoding experiment에서 생성된 전체 결과를 하나의 객체로 묶어 표현한다.
-ResultWriter가 이 객체를 받아 raw dataset, circuit, DEM, decoder prediction, metadata 등을 저장한다.
-"""
 class ExperimentOutput:
+    """
+    하나의 QEC simulation/decoding experiment에서 생성된 전체 결과를
+    하나의 객체로 묶어 표현한다.
+    ResultWriter가 이 객체를 받아 raw dataset, circuit, DEM,
+    decoder prediction, metadata 등을 저장한다.
+    """
     # 사용한 실험 조건 저장
     config: ExperimentConfig
-    
+
     # 생성된 quantum circuit과 detector error model.
     # domain layer가 특정 simulator에 의존하지 않도록 Any로 정의.
     circuit: Any
@@ -137,13 +141,14 @@ class ExperimentOutput:
     # 실험 재현성과 분석을 위한 metadata
     metadata: Mapping[str, object]
 
+
 @dataclass(frozen=True)
 class RunSummary:
-"""
-QEC experiment 완료 후 호출자에게 반환하는 경량 실행 결과.
-대용량 syndrome 배열이나 circuit 객체는 제외하고,
-결과 저장 위치와 핵심 평가/metadata만 제공한다.
-"""
+    """
+    QEC experiment 완료 후 호출자에게 반환하는 경량 실행 결과.
+    대용량 syndrome 배열이나 circuit 객체는 제외하고,
+    결과 저장 위치와 핵심 평가/metadata만 제공한다.
+    """
     output_dir: Path
     evaluation: EvaluationResult
     metadata: Mapping[str, object]
