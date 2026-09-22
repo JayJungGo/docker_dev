@@ -1,0 +1,11 @@
+# QEC Simulator 런타임 (기존)
+stim>=1.14
+pymatching>=2.2
+numpy>=1.24
+
+# GUI / 패키징 (신규)
+PySide6>=6.6
+pyinstaller>=6.0
+
+# 문서 생성(선택)
+python-docx>=1.0

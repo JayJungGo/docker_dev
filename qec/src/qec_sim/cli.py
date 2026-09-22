@@ -7,25 +7,7 @@ import json
 from pathlib import Path
 
 from .domain import ExperimentConfig
-from .evaluation import LogicalErrorEvaluator
-from .metadata import (
-    PackageRuntimeInfoProvider,
-    ReproducibilityMetadataBuilder,
-)
-from .pymatching_backend import (
-    PyMatchingDecoder,
-)
-from .runner import ExperimentRunner
-from .stim_backend import (
-    StimCircuitBuilder,
-    StimCircuitInspector,
-    StimDetectorErrorModelBuilder,
-    StimSyndromeSampler,
-)
-from .storage import (
-    FileSystemResultWriter,
-    RunNameGenerator,
-)
+from .factory import build_runner
 
 
 def parse_config() -> ExperimentConfig:
@@ -34,8 +16,7 @@ def parse_config() -> ExperimentConfig:
 
     parser.add_argument(
         "--task",
-        default=
-            "surface_code:rotated_memory_x",
+        default="surface_code:rotated_memory_x",
     )
 
     parser.add_argument(
@@ -76,9 +57,7 @@ def parse_config() -> ExperimentConfig:
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path(
-            "/workspace/data/qec/raw"
-        ),
+        default=Path("/workspace/data/qec/raw"),
     )
 
     args = parser.parse_args()
@@ -95,70 +74,14 @@ def parse_config() -> ExperimentConfig:
     )
 
 
-def build_runner() -> ExperimentRunner:
-
-    runtime_info = (
-        PackageRuntimeInfoProvider()
-    )
-
-    metadata_builder = (
-        ReproducibilityMetadataBuilder(
-            runtime_info
-        )
-    )
-
-    writer = FileSystemResultWriter(
-        RunNameGenerator()
-    )
-
-    return ExperimentRunner(
-        circuit_builder=
-            StimCircuitBuilder(),
-
-        error_model_builder=
-            StimDetectorErrorModelBuilder(),
-
-        sampler=
-            StimSyndromeSampler(),
-
-        decoder=
-            PyMatchingDecoder(),
-
-        evaluator=
-            LogicalErrorEvaluator(),
-
-        circuit_inspector=
-            StimCircuitInspector(),
-
-        metadata_factory=
-            metadata_builder,
-
-        result_writer=
-            writer,
-    )
-
-
 def main() -> None:
 
     config = parse_config()
-
     runner = build_runner()
+    summary = runner.run(config)
 
-    summary = runner.run(
-        config
-    )
-
-    print(
-        json.dumps(
-            summary.metadata,
-            indent=2,
-        )
-    )
-
-    print(
-        "\nSaved to:",
-        summary.output_dir,
-    )
+    print(json.dumps(summary.metadata, indent=2))
+    print("\nSaved to:", summary.output_dir)
 
 
 if __name__ == "__main__":
